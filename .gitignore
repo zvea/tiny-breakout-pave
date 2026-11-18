@@ -1,0 +1,17 @@
+# Generated from the tiny-breakout submodule by tools/generate.sh; CI makes them before Tiny
+# Tapeout's actions
+/docs/
+/src/
+/test/
+/sim/
+/tools/lec.sh
+/tools/common.sh
+# Tiny Tapeout's support tools and the outputs of its actions
+/tt/
+/tt_submission/
+/gds_render.png
+# Local environments (tiny-breakout/test/README.md), possibly links
+/.venv
+/.tools
+__pycache__/
+.pytest_cache/

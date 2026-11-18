@@ -1,0 +1,91 @@
+name: gds
+
+on:
+  push:
+    branches: ['**']  # not tags: a tag marks a commit its branch push has tested
+  workflow_dispatch:
+
+# Tiny Tapeout's custom GDS flow: the layout is made and checked locally
+# (tools/harden.sh) and committed in layout/, so the gds job packages it with custom_gds instead
+# of hardening; precheck and the gate-level test then run on that package as on any other.
+# docs/ and test/ are not committed: each job generates what it needs from the tiny-breakout
+# submodule (tools/generate.sh) before Tiny Tapeout's action runs, as the actions read the
+# workspace and check out only Tiny Tapeout's own tools.
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces a run still going
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gds:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      # custom_gds uploads docs/ with the layout. info.yaml and LICENSE are committed, as Tiny
+      # Tapeout reads info.yaml from the repository: they must be what the submodule gives.
+      - name: Generate docs
+        shell: bash
+        run: |
+          tools/generate.sh . info.yaml LICENSE docs
+          git diff --exit-code info.yaml LICENSE
+
+      - name: Package the GDS
+        uses: TinyTapeout/tt-gds-action/custom_gds@ttsky26e
+        with:
+          pdk: sky130A
+          top_module: tt_um_tiny_breakout_pave
+          gds_path: layout/tt_um_tiny_breakout_pave.gds
+          lef_path: layout/tt_um_tiny_breakout_pave.lef
+          verilog_path: layout/tt_um_tiny_breakout_pave.pnl.v
+
+      # custom_gds's pdk.json names only the PDK, but gl_test@ttsky26e installs the PDK version
+      # pdk.json gives (PDK_SOURCE, PDK_VERSION): add sky130 as LibreLane 3.0.14 pins it, the
+      # version the layout was signed off with (tools/harden.sh checks this value), and upload
+      # the artifact again.
+      - name: Add the PDK version to pdk.json
+        shell: bash
+        run: |
+          jq '. + {PDK_SOURCE: "open_pdks", PDK_VERSION: "8afc8346a57fe1ab7934ba5a6056ea8b43078e71"}' \
+            tt_submission/pdk.json > pdk.json
+          mv pdk.json tt_submission/pdk.json
+
+      - name: Publish tt_submission artifact again
+        uses: actions/upload-artifact@v7
+        with:
+          name: tt_submission
+          overwrite: true
+          path: |
+            info.yaml
+            LICENSE
+            docs/*
+            tt_submission/*
+
+  precheck:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Run Tiny Tapeout Precheck
+        uses: TinyTapeout/tt-gds-action/precheck@ttsky26e
+
+  gl_test:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Generate test
+        shell: bash
+        run: tools/generate.sh . test
+
+      - name: GL test
+        uses: TinyTapeout/tt-gds-action/gl_test@ttsky26e

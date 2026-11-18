@@ -1,0 +1,3 @@
+[submodule "tiny-breakout"]
+	path = tiny-breakout
+	url = https://github.com/zvea/tiny-breakout.git

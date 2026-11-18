@@ -1,0 +1,31 @@
+name: docs
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces a run still going
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      # The datasheet's text, docs/info.md, is generated from the tiny-breakout submodule, with
+      # src/, as the docs action's tt_tool.py checks that info.yaml's sources are there
+      - name: Generate docs and src
+        shell: bash
+        run: tools/generate.sh . docs src
+
+      - name: Build docs
+        uses: TinyTapeout/tt-gds-action/docs@ttsky26e
